@@ -1,0 +1,8 @@
+#!/usr/bin/bash
+
+# $1, $2 should be paths to private, publickey pair
+mv $1 ~/.ssh/id_rsa
+mv $2 ~/.ssh/id_rsa.pub
+
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_rsa
