@@ -35,9 +35,9 @@ d <- read_csv(
 )
 cli_process_done()
 
-cli_process_start("Reading population file {.file {args$summary_path}}")
+cli_process_start("Reading population file {.file {args$pop_path}}")
 pop <- read_csv(
-  args$pop_path,
+  args$pop,
   col_types = cols_only(
     fips = col_character(),
     pop = col_number()
