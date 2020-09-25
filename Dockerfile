@@ -5,18 +5,12 @@ LABEL org.label-schema.license="GPL-2.0" \
       org.label-schema.vendor="Covidestim" \
       maintainer="Marcus Russi <marcus.russi@yale.edu>"
 
-RUN apt-get update -qq && apt-get -y --no-install-recommends install \
-  openssh-client
-
-# All future commands are run as 'rstudio' user
-USER rstudio
-
-ENV PATH /home/rstudio/scripts:$PATH
+ENV PATH /opt/webworker/scripts:$PATH
 
 # Install MsgPack
 RUN install2.r --error --deps TRUE RcppMsgPack
 
 # Copy over the GitHub repo
-COPY --chown=rstudio . /home/rstudio
+COPY . /opt/webworker
 
-CMD ["R"]
+RUN chmod a+rx /opt/webworker/scripts/*
