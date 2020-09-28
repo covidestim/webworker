@@ -111,12 +111,7 @@ list(
   last_r0_date = d$date[length(d$date)] %>% format('%Y-%m-%d')
 ) -> final
 
-cat(
-  toJSON(final, pretty = TRUE, auto_unbox = TRUE, na = 'null'),
-  file = args$o
-)
-
 writeBin(
   msgpack_simplify(final) %>% msgpack_pack,
-  con = paste0(args$o, '.pack')
+  con = args$o
 )
