@@ -46,9 +46,11 @@ pop <- read_csv(
 cli_process_done()
 
 cli_process_start("Computing per-capita infection rates")
-d <- select(d, fips, date, Rt, infectionsPC = infections) %>%
+d <- select(d, fips, date, Rt, 
+            seroprevalence = cum.incidence, infections) %>%
   left_join(pop, by = "fips") %>%
-  mutate(infectionsPC = infectionsPC * 100000 / pop) %>%
+  mutate(infectionsPC = infections * 100000 / pop,
+         seroprevalence = 100*seroprevalence/pop) %>%
   select(-pop)
 cli_process_done()
 
@@ -63,10 +65,6 @@ strategy2 <- function(d) {
   )
 }
 
-cli_process_start("Serializing to MsgPack")
-encode <- function(strategy) msgpack_pack(strategy(d))
-cli_process_done()
-
-cli_process_start("Writing MsgPack to {.file {args$o}}")
+cli_process_start("Serializing & writing MsgPack to {.file {args$o}}")
 writeBin(msgpack_pack(strategy1(d)), args$o)
 cli_process_done()
