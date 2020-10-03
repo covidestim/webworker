@@ -35,7 +35,6 @@ d_pop <- read_csv(args$pop)
 
 d <- left_join(d, d_input, by = c('date', 'state'))
 d <- filter(d, data.available == TRUE)
-d <- filter(d, date <= max(date) - lubridate::days(2)) # Exclude last 2 days
 
 # Split each state into its own group, then split each group into its own df
 d_split <- d %>% group_by(state) %>% group_split()
