@@ -14,3 +14,8 @@ RUN install2.r --error --deps TRUE RcppMsgPack
 COPY . /opt/webworker
 
 RUN chmod a+rx /opt/webworker/scripts/*
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends postgresql-client \
+  && rm -rf /tmp/downloaded_packages/ /tmp/*.rds \
+  && rm -rf /var/lib/apt/lists/*
