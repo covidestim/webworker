@@ -1,19 +1,21 @@
 #!/usr/bin/env Rscript
 
 suppressPackageStartupMessages( library(tidyverse) )
-library(jsonlite)
+library(jsonlite, warn.conflicts = F)
 library(docopt)
-library(glue)
+library(glue, warn.conflicts = F)
 library(RcppMsgPack)
+library(cli)
 
 glue('covidestim RtLiveConverter
 
 Usage:
-  {name} -o <output_path> --pop <pop_path> --input <input_path> <summary_path>
+  {name} -o <output_path> --pop <pop_path> --input <input_path> [--method <csv>] <summary_path>
   {name} (-h | --help)
   {name} --version
 
 Options:
+  --method <csv>       Specify fit method (sampler/optimizer) as .csv [state,method]
   -o <output_path>     Where to save the .pack file
   --pop <pop_path>     Path to a .csv with columns fips,pop
   --input <input_path> Path to a .csv with columns date, cases, deaths, fracpos
@@ -23,17 +25,67 @@ Options:
 ', name = "RtLiveConvert.R") -> doc
 
 args <- docopt(doc, version = '0.1')
+ps <- cli_process_start
+pd <- cli_process_done
 
-d <- read_csv(args$summary_path)
-d_input <- read_csv(args$input) %>%
+ps("Reading summary file {.file {args$summary_path}}")
+d <- read_csv(
+  args$summary_path,
+  col_types = cols(
+    .default = col_double(),
+    state = col_character(),
+    date = col_date(format = ""),
+    data.available = col_logical()
+  )
+)
+pd()
+
+ps("Reading input data file {.file {args$input}}")
+d_input <- read_csv(
+    args$input,
+    col_types = cols(
+      date = col_date(format = ""),
+      state = col_character(),
+      cases = col_double(),
+      deaths = col_double(),
+      fracpos = col_double(),
+      volume = col_double()
+    )
+  ) %>%
   transmute(date, state,
             input_cases = cases,
             input_deaths = deaths,
             input_volume = round(input_cases / fracpos))
+pd()
 
-d_pop <- read_csv(args$pop)
+ps("Reading state population file {.file {args$pop}}")
+d_pop <- read_csv(args$pop, col_types = cols( state = col_character(), pop = col_double()))
+pd()
 
+# By default we assume no states were optimized
+optimized_states <- character()
+
+if (!identical(args$method, FALSE)) {
+  cli_alert_info("--method flag passed, will be setting fake CIs")
+  ps("Reading fitting-method file {.file {args$method}}")
+  method <- read_csv(
+    args$method,
+    col_types = cols(state = col_character(), method = col_character())
+  )
+  pd()
+
+  optimized_states <- filter(method, method == 'optimizer') %>% pull(state)
+
+  cli_alert_info("The following states were optimized and will have fake CIs")
+  ulid <- cli_ul()
+  walk(sort(optimized_states), cli_li)
+  cli_end(ulid)
+}
+
+ps("Joining results to case/death/volume data")
 d <- left_join(d, d_input, by = c('date', 'state'))
+pd()
+
 d <- filter(d, data.available == TRUE)
 
 # Split each state into its own group, then split each group into its own df
@@ -48,6 +100,12 @@ d_indexed <- d_split %>% setNames(d_statenames)
 
 # Remove unneeded information and transpose
 process_state <- function(df, stateName) {
+
+  stateWasOptimized <- stateName %in% optimized_states
+
+  ps(
+    "Processing state {stateName}{ifelse(stateWasOptimized, ' (Optimized)', '')}",
+  )
 
   c("date"           = "date",
     "r0"             = "Rt",
@@ -69,8 +127,19 @@ process_state <- function(df, stateName) {
     "corr_cases_raw" = "input_cases"
   ) -> vars_to_keep
 
+  if (stateWasOptimized)
+    df <- mutate(
+      df,
+      Rt.lo            = Rt,
+      Rt.hi            = Rt,
+      infections.lo    = infections,
+      infections.hi    = infections,
+      cum.incidence.lo = cum.incidence,
+      cum.incidence.hi = cum.incidence
+    )
+
   df <- select_at(df, vars_to_keep)
-  df <- setNames(df, names(vars_to_keep))
+
   df <- mutate(df, date = format(date, '%Y-%m-%d'))
   df <- mutate_at(
     df,
@@ -85,7 +154,11 @@ process_state <- function(df, stateName) {
       d_pop[[which(d_pop$state == stateName), 'pop']]
   )
 
-  transpose(df)
+  result <- transpose(df)
+  
+  pd()
+
+  result
 }
 
 state_abbrs <- state.abb
@@ -110,7 +183,11 @@ list(
   last_r0_date = d$date[length(d$date)] %>% format('%Y-%m-%d')
 ) -> final
 
+ps("Writing Messagepack to {.file {args$o}}")
 writeBin(
   msgpack_simplify(final) %>% msgpack_pack,
   con = args$o
 )
+pd()
+
+cli_alert_success("Done!")
