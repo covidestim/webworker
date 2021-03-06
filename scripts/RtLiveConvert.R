@@ -163,7 +163,11 @@ process_state <- function(df, stateName) {
 
 state_abbrs <- state.abb
 names(state_abbrs) <- state.name
-state_abbrs = c(state_abbrs, "District of Columbia" = "DC")
+state_abbrs = c(
+  state_abbrs,
+  "District of Columbia" = "DC",
+  "Puerto Rico" = "PR"
+)
 
 restructure_state <- function(lst, state_name) {
   list(
