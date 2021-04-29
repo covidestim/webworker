@@ -10,6 +10,9 @@ ENV PATH /opt/webworker/scripts:$PATH
 # Install MsgPack
 RUN install2.r --error --deps TRUE RcppMsgPack
 
+# Install all specialty packages needed for the data cleaning process
+RUN install2.r --error --deps TRUE sf splines imputeTS tempdisagg
+
 # Copy over the GitHub repo
 COPY . /opt/webworker
 
