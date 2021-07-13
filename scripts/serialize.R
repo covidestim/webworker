@@ -49,7 +49,7 @@ cli_process_done()
 cli_process_start("Computing per-capita infection rates")
 d <- select(d, fips, date, Rt, 
             seroprevalence = cum.incidence, infections) %>%
-  filter(date == max(date) || wday(date) == 1) %>%
+  filter(date == max(date) | lubridate::wday(date) == 1) %>%
   left_join(pop, by = "fips") %>%
   mutate(infectionsPC = infections * 100000 / pop,
          seroprevalence = 100*seroprevalence/pop) %>%
