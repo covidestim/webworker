@@ -10,11 +10,11 @@ ENV PATH /opt/webworker/scripts:$PATH
 # Install MsgPack
 RUN install2.r --error --deps TRUE RcppMsgPack
 
-# Install vaccineAdjust
-RUN installGithub.r covidestim/vaccineAdjust
-
 # Copy over the GitHub repo
 COPY . /opt/webworker
+
+# Install vaccineAdjust
+RUN installGithub.r covidestim/vaccineAdjust
 
 RUN chmod a+rx /opt/webworker/scripts/*
 
