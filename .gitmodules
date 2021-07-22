@@ -1,0 +1,3 @@
+[submodule "vaccineAdjust"]
+	path = vaccineAdjust
+	url = https://github.com/covidestim/vaccineAdjust
