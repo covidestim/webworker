@@ -18,7 +18,13 @@ RUN apt-get update \
 # Copy over the GitHub repo
 COPY . /opt/webworker
 
+# Make all scripts executable
 RUN chmod a+rx /opt/webworker/scripts/*
+
+# Initialize and update the `vaccineAdjust` R package, which is embedded in
+# this repository as a submodule
+RUN git submodule init
+RUN git submodule update
 
 # Install vaccineAdjust
 # RUN installGithub.r covidestim/vaccineAdjust
