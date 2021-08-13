@@ -49,7 +49,8 @@ d_input <- read_csv(
       cases = col_double(),
       deaths = col_double(),
       fracpos = col_double(),
-      volume = col_double()
+      volume = col_double(),
+      RR = col_double()
     )
   ) %>%
   transmute(date, state,
