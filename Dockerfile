@@ -12,6 +12,9 @@ RUN install2.r --error --deps TRUE RcppMsgPack
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends postgresql-client \
+  && echo 'deb http://archive.ubuntu.com/ubuntu groovy main restricted' >> /etc/apt/sources.list \
+  && apt-get update \
+  && apt-get install make \
   && rm -rf /tmp/downloaded_packages/ /tmp/*.rds \
   && rm -rf /var/lib/apt/lists/*
 
