@@ -57,11 +57,12 @@ pop <- read_csv(
 )
 pd()
 
-arch    <- args$backup # archive filepath
-CIvars  <- str_split(args$vars, ',')[[1]]
-K       <- as.numeric(args$minSampled) # minimum number of sampled states
-dfree   <- 50
-outfile <- args$o
+arch       <- args$backup # archive filepath
+CIvars     <- str_split(args$vars, ',')[[1]]
+K          <- as.numeric(args$minSampled) # minimum number of sampled states
+dfree      <- 50
+outfile    <- args$o
+usedBackup <- FALSE # Stores whether or not an RDS LM archive was loaded
 
 ## another way to learn which states sampled and which states did not?
 SampledStates <- unique((d %>% filter(!is.na(infections.hi)))$state)
@@ -101,6 +102,7 @@ if (length(SampledStates) > K) {
   res <- readRDS(arch)
   lm.hi <- res$lm.hi
   lm.lo <- res$lm.lo
+  usedBackup <- TRUE
 } else { # Otherwise, error and exit
   cli_alert_danger("Too few states sampled ({.val {length(SampledStates)}}) and no {.code --backup}. Exiting")
   quit(status=1)
@@ -121,14 +123,50 @@ for (j in CIvars) {
   colNameHi <- glue("{j}.hi")
   colNameLo <- glue("{j}.lo")
 
-  d[colNameHi] <- hi.pred
-  d[colNameLo] <- lo.pred
+  # Only replace confidence intervals if they are actually missing! Otherwise
+  # all states which sampled will be overwritten by the synthetic intervals.
+  d[colNameHi] <- ifelse(is.na(d[[colNameHi]]), hi.pred, d[[colNameHi]])
+  d[colNameLo] <- ifelse(is.na(d[[colNameLo]]), lo.pred, d[[colNameLo]])
 }
 cli_alert_success("Computed all CIs")
 
+# All variables from covidestim output which have a '.hi/.lo' field
+allCIVars <- colnames(d)[which(str_detect(colnames(d), '\\.hi'))] %>% str_remove('\\.hi')
+
+# All variables which will have missing CIs if the state's results are from
+# BFGS
+allMissingVars <- setdiff(allCIVars, CIvars)
+
+metadata <- mutate(
+  metadata,
+  # "mixed" refers to the fact that several but NOT all intervals are
+  # synthetically generated (all other intervals, in a non sampled run, are 
+  # still NA-valued)
+  intervalType = ifelse(state %in% SampledStates, "sampled", "mixed"),
+  syntheticIntervalDetails = map( # Add to the JSON object for each state
+    state,
+    function(state) {
+       # Don't add a value to this key if the state sampled
+      if (state %in% SampledStates) 
+        return(NULL);
+
+      list(
+        missingIntervals = allMissingVars,
+        # When using `auto_unbox` with `toJSON`, make sure all possibly-1-length
+        # vectors are enclosed in I() so that they always are represented as
+        # arrays.
+        syntheticIntervals = I(CIvars),
+        sampledIntervals = character(0),
+        usedBackup = usedBackup,
+        numSampled = ifelse(usedBackup, NA, length(SampledStates))
+      )
+    }
+  )
+)
+
 if (!is.null(args$writeMetadata)) {
   ps("Writing metadata to {.file {args$writeMetadata}}")
-  jsonlite::write_json(metadata, args$writeMetadata, null = "null")
+  jsonlite::write_json(metadata, args$writeMetadata, null = "null", auto_unbox = TRUE)
   pd()
 } else {
   cli_alert_warning("{.code --writeMetadata} not passed; skipping metadata write")
