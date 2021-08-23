@@ -8,12 +8,13 @@ library(glue, warn.conflicts=F)
 glue('covidestim synthetic-interval generator
 
 Usage:
-  {name} -o <path> [--backup <path> --writeBackup <path> --vars <vars> --minSampled <num>] --metadata <path> --writeMetadata <path> <result_path>
+  {name} -o <path> --statepop <path> [--backup <path> --writeBackup <path> --vars <vars> --minSampled <num> --metadata <path> --writeMetadata <path>] <result_path>
   {name} (-h | --help)
   {name} --version
 
 Options:
   -o <path>               Where to output the resulting .csv
+  --statepop <path>       Path of a .csv file [state,pop]
   --backup <path>         Where to locate the archived LM objects, should they be needed
   --writeBackup <path>    Where to write an archive of LM objects, for future use
   --vars <vars>           A comma-delimited list of variables to generate CIs for [default: infections,Rt,cum.incidence]
@@ -29,12 +30,15 @@ args <- docopt(doc, version = '0.1')
 ps <- cli_process_start
 pd <- cli_process_done
 
-print(args)
+if (!is.null(args$metadata)) {
+  ps("Reading metadata from {.file {args$metadata}}")
+  metadata <- jsonlite::read_json(args$metadata, simplifyVector = T)
+  pd()
+} else {
+  cli_alert_warning("No {.code --metadata} flag passed")
+}
 
-ps("Reading metadata from {.file {args$metadata}}")
-metadata <- jsonlite::read_json(args$metadata, simplifyVector = T)
-pd()
-
+ps("Reading results file {.file {args$result_path}}")
 d <- read_csv(
   args$result_path,
   col_types = cols(
@@ -44,6 +48,15 @@ d <- read_csv(
     .default = col_number()
   )
 ) # Load the results csv file
+pd()
+
+ps("Reading state population size file {.file {args$statepop}}")
+pop <- read_csv(
+  args$statepop,
+  col_types = cols(state = col_character(), pop = col_number())
+)
+pd()
+
 arch    <- args$backup # archive filepath
 CIvars  <- str_split(args$vars, ',')[[1]]
 K       <- as.numeric(args$minSampled) # minimum number of sampled states
@@ -113,9 +126,13 @@ for (j in CIvars) {
 }
 cli_alert_success("Computed all CIs")
 
-ps("Writing metadata to {.file {args$writeMetadata}}")
-jsonlite::write_json(metadata, args$writeMetadata, null = "null")
-pd()
+if (!is.null(args$writeMetadata)) {
+  ps("Writing metadata to {.file {args$writeMetadata}}")
+  jsonlite::write_json(metadata, args$writeMetadata, null = "null")
+  pd()
+} else {
+  cli_alert_warning("{.code --writeMetadata} not passed; skipping metadata write")
+}
 
 ps("Writing new summary CSV to {.file {outfile}}")
 write_csv(d, outfile)
