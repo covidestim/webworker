@@ -122,12 +122,14 @@ if (length(SampledStates) > K) {
 for (j in CIvars) {
   cli_alert_info("Computing CIs for variable {.code {j}}")
   if(j == "cum.incidence"){
-    hi.pred <- data.frame("pred" =invlogit(y[[j]] - predict(lm.hi[[j]], 
-                                                            data.frame(splines::ns(y$reltime, 
-                                                                                   df = dfree)))))*y$pop
-    lo.pred <- data.frame("pred" = invlogit(y[[j]] - predict(lm.lo[[j]], 
-                                                             data.frame(splines::ns(y$reltime, 
-                                                                                    df = dfree)))))*y$pop
+    hi.pred <- invlogit(y[[j]] - predict(lm.hi[[j]],
+                                         data.frame(splines::ns(y$reltime,
+                                                                df = dfree)))) *
+      y$pop
+    lo.pred <- invlogit(y[[j]] - predict(lm.lo[[j]],
+                                         data.frame(splines::ns(y$reltime,
+                                                                df = dfree)))) *
+      y$pop
   } else{
   hi.pred <- exp(
     predict(lm.hi[[j]], splines::ns(y$reltime, df = dfree)) +
