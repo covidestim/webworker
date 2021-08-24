@@ -5,6 +5,9 @@ library(docopt)
 library(cli)
 library(glue, warn.conflicts=F)
 
+logit <-function(p) log(p/(1-p))
+invlogit <- function(q) exp(q)/(exp(q)+1)
+
 glue('covidestim synthetic-interval generator
 
 Usage:
@@ -71,17 +74,24 @@ cli_alert_info("{.val {length(SampledStates)}} sampled from this run")
 
 lm.hi <- lm.lo <- NULL
 
-y <- d %>%
+y <- d %>% 
+  left_join(pop, by = "state") %>%
+  mutate(cum.incidence = cum.incidence/pop,
+         cum.incidence.hi = cum.incidence.hi/pop,
+         cum.incidence.lo = cum.incidence.lo/pop) %>%
   select(state, date, starts_with(CIvars)) %>%
-  # MARCUS: What will happen here if one of `CIvars` is equal to 0?
-  # While the model probably is unable to generate 0s for any of `CIvars`,
-  # I don't believe we can guarantee that they won't be rounded to 0 when
-  # the results are serialized to CSVs
-  mutate_at(vars(-state, -date), log) %>%
-  group_by(state) %>%
-  mutate(time = as.numeric(date - max(date)) - 1, # Why go <0 here?
+  group_by(state)%>%
+  # replace any zeros with lowest values
+  mutate_at(vars(starts_with(CIvars)), function(x){if_else(x == 0,
+                                 x + 
+                                   min(x[x > 0])/2,
+                                 x)}) %>%
+  mutate(time = as.numeric(date - min(date)) + 1,
          reltime = time / abs(min(time))) %>%
-  ungroup()
+  ungroup() %>%
+ mutate_at(vars(starts_with("cum.incidence")),  ~logit(.)) %>%
+  mutate_at(vars(-state, -date, -starts_with("cum.incidence")), log) 
+
 
 # If at least `--minSampled` states sampled, proceed with fitting
 if (length(SampledStates) > K) {
@@ -111,6 +121,14 @@ if (length(SampledStates) > K) {
 # Compute new CIs
 for (j in CIvars) {
   cli_alert_info("Computing CIs for variable {.code {j}}")
+  if(j == "cum.incidence"){
+    hi.pred <- data.frame("pred" =invlogit(y[[j]] - predict(lm.hi[[j]], 
+                                                            data.frame(splines::ns(y$reltime, 
+                                                                                   df = dfree)))))*y$pop
+    lo.pred <- data.frame("pred" = invlogit(y[[j]] - predict(lm.lo[[j]], 
+                                                             data.frame(splines::ns(y$reltime, 
+                                                                                    df = dfree)))))*y$pop
+  } else{
   hi.pred <- exp(
     predict(lm.hi[[j]], splines::ns(y$reltime, df = dfree)) +
       y[[j]]
@@ -119,7 +137,7 @@ for (j in CIvars) {
     predict(lm.lo[[j]], splines::ns(y$reltime, df = dfree)) +
       y[[j]]
   )
-
+}
   colNameHi <- glue("{j}.hi")
   colNameLo <- glue("{j}.lo")
 
@@ -127,6 +145,7 @@ for (j in CIvars) {
   # all states which sampled will be overwritten by the synthetic intervals.
   d[colNameHi] <- ifelse(is.na(d[[colNameHi]]), hi.pred, d[[colNameHi]])
   d[colNameLo] <- ifelse(is.na(d[[colNameLo]]), lo.pred, d[[colNameLo]])
+  
 }
 cli_alert_success("Computed all CIs")
 
