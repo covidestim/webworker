@@ -90,7 +90,7 @@ y <- d %>%
          reltime = time / abs(min(time))) %>%
   ungroup() %>%
  mutate_at(vars(starts_with("cum.incidence")),  ~logit(.)) %>%
-  mutate_at(vars(-state, -date, -starts_with("cum.incidence")), log) 
+  mutate_at(vars(-state, -date, -pop, -starts_with("cum.incidence")), log) 
 
 
 # If at least `--minSampled` states sampled, proceed with fitting
@@ -131,13 +131,11 @@ for (j in CIvars) {
                                                                 df = dfree)))) *
       y$pop
   } else{
-  hi.pred <- exp(
-    predict(lm.hi[[j]], splines::ns(y$reltime, df = dfree)) +
-      y[[j]]
+  hi.pred <- exp(y[[j]] -
+    predict(lm.hi[[j]], splines::ns(y$reltime, df = dfree))
   )
-  lo.pred <- exp(
-    predict(lm.lo[[j]], splines::ns(y$reltime, df = dfree)) +
-      y[[j]]
+  lo.pred <- exp(y[[j]] - 
+    predict(lm.lo[[j]], splines::ns(y$reltime, df = dfree))
   )
 }
   colNameHi <- glue("{j}.hi")
