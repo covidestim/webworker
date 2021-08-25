@@ -74,6 +74,9 @@ cli_alert_info("{.val {length(SampledStates)}} sampled from this run")
 
 lm.hi <- lm.lo <- NULL
 
+Bounds     <- 300
+n.ends     <- Bounds/3
+
 y <- d %>% 
   left_join(pop, by = "state") %>%
   mutate(cum.incidence = cum.incidence/pop,
@@ -86,11 +89,18 @@ y <- d %>%
                                  x + 
                                    min(x[x > 0])/2,
                                  x)}) %>%
-  mutate(time = as.numeric(max(date) - date) + 1,
-         reltime = time / abs(max(time))) %>%
+  mutate(days = as.numeric(max(date) - date) + 1,
+         #transform time: first n.ends and last n.ends
+         time = if_else(days <= n.ends,
+                        days,
+                        if_else((max(days) - days) < n.ends,
+                                days - max(days) + Bounds,
+                                n.ends + n.ends*(days)/(max(days))
+                                )
+                        )) %>%
   ungroup() %>%
  mutate_at(vars(starts_with("cum.incidence")),  ~logit(.)) %>%
- mutate_at(vars(-state, -date, -pop, -starts_with("cum.incidence")), log)
+ mutate_at(vars(-state, -date, -pop, -time, -days, -starts_with("cum.incidence")), log)
   # mutate_at(vars(-state, -date), log) 
 
 
@@ -99,8 +109,8 @@ if (length(SampledStates) > K) {
   for (j in CIvars) {
     y.hi <- y[[j]] - y[[paste0(j, ".hi")]]
     y.lo <- y[[j]] - y[[paste0(j, ".lo")]]
-    lm.hi[[j]] <- lm(y.hi ~ splines::ns(y$time, df = dfree, Boundary.knots = c(0,300)))
-    lm.lo[[j]] <- lm(y.lo ~ splines::ns(y$time, df = dfree, Boundary.knots = c(0,300)))
+    lm.hi[[j]] <- lm(y.hi ~ splines::ns(y$time, df = dfree, Boundary.knots = c(0,Bounds)))
+    lm.lo[[j]] <- lm(y.lo ~ splines::ns(y$time, df = dfree, Boundary.knots = c(0,Bounds)))
   }
   cli_alert_info("Finished fitting .hi/.lo LMs")
 
@@ -124,12 +134,12 @@ for (j in CIvars) {
   cli_alert_info("Computing CIs for variable {.code {j}}")
   if(j == "cum.incidence"){
     hi.pred <- invlogit(y[[j]] - predict(lm.hi[[j]],
-                                         data.frame(splines::ns(y$reltime,
-                                                                df = dfree, Boundary.knots = c(0,300))))) *
+                                         data.frame(splines::ns(y$time,
+                                                                df = dfree, Boundary.knots = c(0,Bounds))))) *
       y$pop
     lo.pred <- invlogit(y[[j]] - predict(lm.lo[[j]],
-                                         data.frame(splines::ns(y$reltime,
-                                                                df = dfree, Boundary.knots = c(0,300))))) *
+                                         data.frame(splines::ns(y$time,
+                                                                df = dfree, Boundary.knots = c(0,Bounds))))) *
       y$pop
   } else{
   hi.pred <- exp(y[[j]] -
