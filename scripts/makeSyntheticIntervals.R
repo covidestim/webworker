@@ -53,12 +53,12 @@ d <- read_csv(
 ) # Load the results csv file
 pd()
 
-# ps("Reading state population size file {.file {args$statepop}}")
-# pop <- read_csv(
-#   args$statepop,
-#   col_types = cols(state = col_character(), pop = col_number())
-# )
-# pd()
+ps("Reading state population size file {.file {args$statepop}}")
+pop <- read_csv(
+  args$statepop,
+  col_types = cols(state = col_character(), pop = col_number())
+)
+pd()
 
 arch       <- args$backup # archive filepath
 CIvars     <- str_split(args$vars, ',')[[1]]
@@ -75,23 +75,23 @@ cli_alert_info("{.val {length(SampledStates)}} sampled from this run")
 lm.hi <- lm.lo <- NULL
 
 y <- d %>% 
-  # left_join(pop, by = "state") %>%
-  # mutate(cum.incidence = cum.incidence/pop,
-  #        cum.incidence.hi = cum.incidence.hi/pop,
-  #        cum.incidence.lo = cum.incidence.lo/pop) %>%
-  select(state, date, starts_with(CIvars)) %>%
+  left_join(pop, by = "state") %>%
+  mutate(cum.incidence = cum.incidence/pop,
+         cum.incidence.hi = cum.incidence.hi/pop,
+         cum.incidence.lo = cum.incidence.lo/pop) %>%
+  select(state, date, pop, starts_with(CIvars)) %>%
   group_by(state)%>%
   # replace any zeros with lowest values
   mutate_at(vars(starts_with(CIvars)), function(x){if_else(x == 0,
                                  x + 
                                    min(x[x > 0])/2,
                                  x)}) %>%
-  mutate(time = as.numeric(date - min(date)) + 1,
-         reltime = time / abs(min(time))) %>%
+  mutate(time = as.numeric(max(date) - date) + 1,
+         reltime = time / abs(max(time))) %>%
   ungroup() %>%
- # mutate_at(vars(starts_with("cum.incidence")),  ~logit(.)) %>%
-  # mutate_at(vars(-state, -date, -pop, -starts_with("cum.incidence")), log) 
-  mutate_at(vars(-state, -date), log) 
+ mutate_at(vars(starts_with("cum.incidence")),  ~logit(.)) %>%
+ mutate_at(vars(-state, -date, -pop, -starts_with("cum.incidence")), log)
+  # mutate_at(vars(-state, -date), log) 
 
 
 # If at least `--minSampled` states sampled, proceed with fitting
@@ -99,8 +99,8 @@ if (length(SampledStates) > K) {
   for (j in CIvars) {
     y.hi <- y[[j]] - y[[paste0(j, ".hi")]]
     y.lo <- y[[j]] - y[[paste0(j, ".lo")]]
-    lm.hi[[j]] <- lm(y.hi ~ splines::ns(y$reltime, df = dfree))
-    lm.lo[[j]] <- lm(y.lo ~ splines::ns(y$reltime, df = dfree))
+    lm.hi[[j]] <- lm(y.hi ~ splines::ns(y$time, df = dfree, Boundary.knots = c(0,300)))
+    lm.lo[[j]] <- lm(y.lo ~ splines::ns(y$time, df = dfree, Boundary.knots = c(0,300)))
   }
   cli_alert_info("Finished fitting .hi/.lo LMs")
 
@@ -122,23 +122,23 @@ if (length(SampledStates) > K) {
 # Compute new CIs
 for (j in CIvars) {
   cli_alert_info("Computing CIs for variable {.code {j}}")
-  # if(j == "cum.incidence"){
-  #   hi.pred <- invlogit(y[[j]] - predict(lm.hi[[j]],
-  #                                        data.frame(splines::ns(y$reltime,
-  #                                                               df = dfree)))) *
-  #     y$pop
-  #   lo.pred <- invlogit(y[[j]] - predict(lm.lo[[j]],
-  #                                        data.frame(splines::ns(y$reltime,
-  #                                                               df = dfree)))) *
-  #     y$pop
-  # } else{
+  if(j == "cum.incidence"){
+    hi.pred <- invlogit(y[[j]] - predict(lm.hi[[j]],
+                                         data.frame(splines::ns(y$reltime,
+                                                                df = dfree, Boundary.knots = c(0,300))))) *
+      y$pop
+    lo.pred <- invlogit(y[[j]] - predict(lm.lo[[j]],
+                                         data.frame(splines::ns(y$reltime,
+                                                                df = dfree, Boundary.knots = c(0,300))))) *
+      y$pop
+  } else{
   hi.pred <- exp(y[[j]] -
-    predict(lm.hi[[j]], splines::ns(y$reltime, df = dfree))
+    predict(lm.hi[[j]], splines::ns(y$time, df = dfree, Boundary.knots = c(0,300)))
   )
   lo.pred <- exp(y[[j]] - 
-    predict(lm.lo[[j]], splines::ns(y$reltime, df = dfree))
+    predict(lm.lo[[j]], splines::ns(y$time, df = dfree, Boundary.knots = c(0,300)))
   )
-# }
+}
   colNameHi <- glue("{j}.hi")
   colNameLo <- glue("{j}.lo")
 
