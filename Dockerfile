@@ -30,5 +30,5 @@ RUN cd /opt/webworker && git submodule init && git submodule update
 
 # Install vaccineAdjust
 # RUN installGithub.r covidestim/vaccineAdjust
-RUN Rscript -e "devtools::install('/opt/webworker/vaccineAdjust/')"
+RUN cd /opt/webworker/ && R CMD INSTALL vaccineAdjust
 
