@@ -5,8 +5,8 @@ library(docopt)
 library(cli)
 library(glue, warn.conflicts=F)
 
-# logit <-function(p) log(p/(1-p))
-# invlogit <- function(q) exp(q)/(exp(q)+1)
+logit <-function(p) log(p/(1-p))
+invlogit <- function(q) exp(q)/(exp(q)+1)
 
 glue('covidestim synthetic-interval generator
 
