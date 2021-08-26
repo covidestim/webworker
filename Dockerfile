@@ -11,7 +11,8 @@ ENV PATH /opt/webworker/scripts:$PATH
 RUN install2.r --error --deps TRUE RcppMsgPack
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends postgresql-client \
+  && apt-get install -y --no-install-recommends \
+    postgresql-client jq \
   && echo 'deb http://archive.ubuntu.com/ubuntu groovy main restricted' >> /etc/apt/sources.list \
   && apt-get update \
   && apt-get install make \
