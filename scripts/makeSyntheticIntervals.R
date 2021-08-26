@@ -76,6 +76,8 @@ lm.hi <- lm.lo <- NULL
 
 Bounds     <- 300
 n.ends     <- Bounds/3
+fixdays    <- 7
+dayknots   <- round(c(1:fixdays, seq(fixdays+1, wtime-1, length.out = (dfree - 1 - fixdays))))
 
 y <- d %>% 
   left_join(pop, by = "state") %>%
@@ -109,8 +111,8 @@ if (length(SampledStates) > K) {
   for (j in CIvars) {
     y.hi <- y[[j]] - y[[paste0(j, ".hi")]]
     y.lo <- y[[j]] - y[[paste0(j, ".lo")]]
-    lm.hi[[j]] <- lm(y.hi ~ splines::ns(y$time, df = dfree, Boundary.knots = c(0,Bounds)))
-    lm.lo[[j]] <- lm(y.lo ~ splines::ns(y$time, df = dfree, Boundary.knots = c(0,Bounds)))
+    lm.hi[[j]] <- lm(y.hi ~ splines::ns(y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = dayknots))
+    lm.lo[[j]] <- lm(y.lo ~ splines::ns(y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = dayknots))
   }
   cli_alert_info("Finished fitting .hi/.lo LMs")
 
@@ -135,18 +137,22 @@ for (j in CIvars) {
   if(j == "cum.incidence"){
     hi.pred <- invlogit(y[[j]] - predict(lm.hi[[j]],
                                          data.frame(splines::ns(y$time,
-                                                                df = dfree, Boundary.knots = c(0,Bounds))))) *
+                                                                df = dfree, Boundary.knots = c(0,Bounds),
+                                                                knots = dayknots)))) *
       y$pop
     lo.pred <- invlogit(y[[j]] - predict(lm.lo[[j]],
                                          data.frame(splines::ns(y$time,
-                                                                df = dfree, Boundary.knots = c(0,Bounds))))) *
+                                                                df = dfree, Boundary.knots = c(0,Bounds),
+                                                                knots = dayknots)))) *
       y$pop
   } else{
   hi.pred <- exp(y[[j]] -
-    predict(lm.hi[[j]], splines::ns(y$time, df = dfree, Boundary.knots = c(0,300)))
+    predict(lm.hi[[j]], splines::ns(y$time, df = dfree, Boundary.knots = c(0,300),
+                                    knots = dayknots))
   )
   lo.pred <- exp(y[[j]] - 
-    predict(lm.lo[[j]], splines::ns(y$time, df = dfree, Boundary.knots = c(0,300)))
+    predict(lm.lo[[j]], splines::ns(y$time, df = dfree, Boundary.knots = c(0,300),
+                                    knots = dayknots))
   )
 }
   colNameHi <- glue("{j}.hi")
