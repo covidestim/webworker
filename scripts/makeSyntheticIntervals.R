@@ -77,7 +77,7 @@ lm.hi <- lm.lo <- NULL
 Bounds     <- 300
 n.ends     <- Bounds/3
 fixdays    <- 7
-dayknots   <- round(c(1:fixdays, seq(fixdays+1, wtime-1, length.out = (dfree - 1 - fixdays))))
+dayknots   <- round(c(1:fixdays, seq(fixdays+1, Bounds-1, length.out = (dfree - 1 - fixdays))))
 
 y <- d %>% 
   left_join(pop, by = "state") %>%
@@ -97,7 +97,7 @@ y <- d %>%
                         days,
                         if_else((max(days) - days) < n.ends,
                                 days - max(days) + Bounds,
-                                n.ends + n.ends*(days)/(max(days))
+                                n.ends + (n.ends/(max(days)-2*n.ends))*(days-n.ends)
                                 )
                         )) %>%
   ungroup() %>%
