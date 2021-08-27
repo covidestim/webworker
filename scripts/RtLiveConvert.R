@@ -77,7 +77,7 @@ if (!identical(args$method, FALSE)) {
 
   optimized_states <- filter(method, method == 'optimizer') %>% pull(state)
 
-  cli_alert_info("The following states were optimized and will have fake CIs")
+  cli_alert_info("The following states were optimized and will have synthetic CIs")
   ulid <- cli_ul()
   walk(sort(optimized_states), cli_li)
   cli_end(ulid)
@@ -105,7 +105,7 @@ process_state <- function(df, stateName) {
   stateWasOptimized <- stateName %in% optimized_states
 
   ps(
-    "Processing state {stateName}{ifelse(stateWasOptimized, ' (Optimized)', '')}",
+    "Processing state {stateName}{ifelse(stateWasOptimized, ' (Optimized w/ synthetic intervals)', '')}",
   )
 
   c("date"           = "date",
@@ -128,16 +128,16 @@ process_state <- function(df, stateName) {
     "corr_cases_raw" = "input_cases"
   ) -> vars_to_keep
 
-  if (stateWasOptimized)
-    df <- mutate(
-      df,
-      Rt.lo            = Rt,
-      Rt.hi            = Rt,
-      infections.lo    = infections,
-      infections.hi    = infections,
-      cum.incidence.lo = cum.incidence,
-      cum.incidence.hi = cum.incidence
-    )
+  # if (stateWasOptimized)
+  #   df <- mutate(
+  #     df,
+  #     Rt.lo            = Rt,
+  #     Rt.hi            = Rt,
+  #     infections.lo    = infections,
+  #     infections.hi    = infections,
+  #     cum.incidence.lo = cum.incidence,
+  #     cum.incidence.hi = cum.incidence
+  #   )
 
   df <- select_at(df, vars_to_keep)
 
