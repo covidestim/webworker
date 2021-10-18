@@ -7,8 +7,11 @@ LABEL org.label-schema.license="GPL-2.0" \
 
 ENV PATH /opt/webworker/scripts:$PATH
 
-# Install MsgPack
-RUN install2.r --error --deps TRUE RcppMsgPack
+# Install R packages:
+#   - MsgPack (for serialization)
+#   - tempdisagg (for county-level vax imputation)
+#   - zoo ("   ")
+RUN install2.r --error --deps TRUE RcppMsgPack tempdisagg zoo
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
