@@ -50,7 +50,8 @@ d_input <- read_csv(
       deaths = col_double(),
       fracpos = col_double(),
       volume = col_double(),
-      RR = col_double()
+      RR = col_double(),
+      vaccinated = col_double()
     )
   ) %>%
   transmute(date, state,
