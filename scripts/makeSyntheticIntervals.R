@@ -20,7 +20,7 @@ Options:
   --statepop <path>       Path of a .csv file [state,pop]
   --backup <path>         Where to locate the archived LM objects, should they be needed
   --writeBackup <path>    Where to write an archive of LM objects, for future use
-  --vars <vars>           A comma-delimited list of variables to generate CIs for [default: infections,Rt,cum.incidence]
+  --vars <vars>           A comma-delimited list of variables to generate CIs for [default: infections,r_t,infections_cumulative]
   --minSampled <num>      The minimum number of sampled tracts needed to run LM [default: 10]
   --metadata <path>       Path to .json of metadata
   --writeMetadata <path>  Where to write metadata generated during synthetic interval process
@@ -47,7 +47,7 @@ d <- read_csv(
   col_types = cols(
     date = col_date(format = '%Y-%m-%d'),
     state = col_character(),
-    data.available = col_logical(),
+    data_available = col_logical(),
     .default = col_number()
   )
 ) # Load the results csv file
@@ -68,11 +68,11 @@ outfile    <- args$o
 usedBackup <- FALSE # Stores whether or not an RDS LM archive was loaded
 
 ## another way to learn which states sampled and which states did not?
-SampledStates <- unique((d %>% filter(!is.na(infections.hi)))$state)
+SampledStates <- unique((d %>% filter(!is.na(infections_p2_5)))$state)
 
 cli_alert_info("{.val {length(SampledStates)}} sampled from this run")
 
-lm.hi <- lm.lo <- NULL
+lm_p97_5 <- lm_p2_5 <- NULL
 
 Bounds     <- 300
 n.ends     <- Bounds/3
@@ -81,50 +81,76 @@ dayknots   <- round(c(1:fixdays, seq(fixdays+1, Bounds-1, length.out = (dfree - 
 
 y <- d %>% 
   left_join(pop, by = "state") %>%
-  mutate(cum.incidence = cum.incidence/pop,
-         cum.incidence.hi = cum.incidence.hi/pop,
-         cum.incidence.lo = cum.incidence.lo/pop) %>%
+  mutate(
+    infections_cumulative       = infections_cumulative/pop,
+    infections_cumulative_p2_5  = infections_cumulative_p2_5/pop,
+    infections_cumulative_p25   = infections_cumulative_p25/pop,
+    infections_cumulative_p75   = infections_cumulative_p75/pop,
+    infections_cumulative_p97_5 = infections_cumulative_p97_5/pop,
+  ) %>%
   select(state, date, pop, starts_with(CIvars)) %>%
   group_by(state)%>%
   # replace any zeros with lowest values
-  mutate_at(vars(starts_with(CIvars)), function(x){if_else(x == 0,
-                                 x + 
-                                   min(x[x > 0])/2,
-                                 x)}) %>%
-  mutate(days = as.numeric(max(date) - date) + 1,
-         #transform time: first n.ends and last n.ends
-         time = if_else(days <= n.ends,
-                        days,
-                        if_else((max(days) - days) < n.ends,
-                                days - max(days) + Bounds,
-                                n.ends + (n.ends/(max(days)-2*n.ends))*(days-n.ends)
-                                )
-                        )) %>%
-  ungroup() %>%
- mutate_at(vars(starts_with("cum.incidence")),  ~logit(.)) %>%
- mutate_at(vars(-state, -date, -pop, -time, -days, -starts_with("cum.incidence")), log)
-  # mutate_at(vars(-state, -date), log) 
+  mutate_at(
+    vars(starts_with(CIvars)),
+    function(x) {
+      if_else(x == 0, x + min(x[x > 0])/2, x)
+    }
+  ) %>%
+  mutate(
+    days = as.numeric(max(date) - date) + 1,
 
+    # transform time: first n.ends and last n.ends
+    time = if_else(
+      days <= n.ends,
+      days,
+      if_else(
+        (max(days) - days) < n.ends,
+        days - max(days) + Bounds,
+        n.ends + (n.ends/(max(days)-2*n.ends))*(days-n.ends)
+      )
+    )
+  ) %>%
+  ungroup() %>%
+  mutate_at(vars(starts_with("infections_cumulative")),  ~logit(.)) %>%
+  mutate_at(
+    vars(
+      -state, -date, -pop, -time, -days, -starts_with("infections_cumulative")
+    ),
+    log
+  )
 
 # If at least `--minSampled` states sampled, proceed with fitting
 if (length(SampledStates) > K) {
   for (j in CIvars) {
-    y.hi <- y[[j]] - y[[paste0(j, ".hi")]]
-    y.lo <- y[[j]] - y[[paste0(j, ".lo")]]
-    lm.hi[[j]] <- lm(y.hi ~ splines::ns(y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = dayknots))
-    lm.lo[[j]] <- lm(y.lo ~ splines::ns(y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = dayknots))
+    y_p97_5 <- y[[j]] - y[[paste0(j, "_p97_5")]]
+    y_p2_5  <- y[[j]] - y[[paste0(j, "_p2_5")]]
+
+    lm_p97_5[[j]] <- lm(
+      y_p97_5 ~ splines::ns(
+        y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = dayknots
+      )
+    )
+
+    lm_p2_5[[j]] <- lm(
+      y_p2_5 ~ splines::ns(
+        y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = dayknots
+      )
+    )
   }
-  cli_alert_info("Finished fitting .hi/.lo LMs")
+
+  cli_alert_info("Finished fitting _p97_5/_p2_5 LMs")
 
   if (!is.null(args$writeBackup)) {
     cli_alert_info("Writing LM archive to {.file {args$writeBackup}}")
-    saveRDS(list("lm.hi" = lm.hi,"lm.lo" = lm.lo), args$writeBackup)
+    saveRDS(list("lm_p97_5" = lm_p97_5,"lm_p2_5" = lm_p2_5), args$writeBackup)
   }
+
 } else if (!is.null(arch)) { # Otherwise, load archived LM objects, if possible
   cli_alert_warning("Too few states sampled ({.val {length(SampledStates)}}), instead loading backup LM objects from {.file {arch}}")
   res <- readRDS(arch)
-  lm.hi <- res$lm.hi
-  lm.lo <- res$lm.lo
+  lm_p97_5 <- res$lm_p97_5
+  lm_p2_5  <- res$lm_p2_5
   usedBackup <- TRUE
 } else { # Otherwise, error and exit
   cli_alert_danger("Too few states sampled ({.val {length(SampledStates)}}) and no {.code --backup}. Exiting")
@@ -134,40 +160,60 @@ if (length(SampledStates) > K) {
 # Compute new CIs
 for (j in CIvars) {
   cli_alert_info("Computing CIs for variable {.code {j}}")
-  if(j == "cum.incidence"){
-    hi.pred <- invlogit(y[[j]] - predict(lm.hi[[j]],
-                                         data.frame(splines::ns(y$time,
-                                                                df = dfree, Boundary.knots = c(0,Bounds),
-                                                                knots = dayknots)))) *
-      y$pop
-    lo.pred <- invlogit(y[[j]] - predict(lm.lo[[j]],
-                                         data.frame(splines::ns(y$time,
-                                                                df = dfree, Boundary.knots = c(0,Bounds),
-                                                                knots = dayknots)))) *
-      y$pop
-  } else{
-  hi.pred <- exp(y[[j]] -
-    predict(lm.hi[[j]], splines::ns(y$time, df = dfree, Boundary.knots = c(0,300),
-                                    knots = dayknots))
-  )
-  lo.pred <- exp(y[[j]] - 
-    predict(lm.lo[[j]], splines::ns(y$time, df = dfree, Boundary.knots = c(0,300),
-                                    knots = dayknots))
-  )
-}
-  colNameHi <- glue("{j}.hi")
-  colNameLo <- glue("{j}.lo")
+  if(j == "infections_cumulative"){
+    pred_p97_5 <- y$pop * invlogit(
+      y[[j]] -
+        predict(
+          lm_p97_5[[j]],
+          data.frame(splines::ns(
+            y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = dayknots
+          ))
+        )
+    )
+
+    pred_p2_5 <- y$pop * invlogit(
+      y[[j]] -
+        predict(
+          lm_p2_5[[j]],
+          data.frame(splines::ns(
+            y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = dayknots
+          ))
+        )
+    )
+
+  } else {
+    pred_p97_5 <- exp(y[[j]] -
+      predict(
+        lm_p97_5[[j]],
+        splines::ns(
+          y$time, df = dfree, Boundary.knots = c(0,300), knots = dayknots
+        )
+      )
+    )
+
+    pred_p2_5 <- exp(y[[j]] - 
+      predict(
+        lm_p2_5[[j]],
+        splines::ns(
+          y$time, df = dfree, Boundary.knots = c(0,300), knots = dayknots
+        )
+      )
+    )
+  }
+
+  col_name_p97_5 <- glue("{j}_p97_5")
+  col_name_p2_5  <- glue("{j}_p2_5")
 
   # Only replace confidence intervals if they are actually missing! Otherwise
   # all states which sampled will be overwritten by the synthetic intervals.
-  d[colNameHi] <- ifelse(is.na(d[[colNameHi]]), hi.pred, d[[colNameHi]])
-  d[colNameLo] <- ifelse(is.na(d[[colNameLo]]), lo.pred, d[[colNameLo]])
-  
+  d[col_name_p97_5] <- ifelse(is.na(d[[col_name_p97_5]]), pred_p97_5, d[[col_name_p97_5]])
+  d[col_name_p2_5]  <- ifelse(is.na(d[[col_name_p2_5]]),  pred_p2_5,  d[[col_name_p2_5]])
 }
+
 cli_alert_success("Computed all CIs")
 
-# All variables from covidestim output which have a '.hi/.lo' field
-allCIVars <- colnames(d)[which(str_detect(colnames(d), '\\.hi'))] %>% str_remove('\\.hi')
+# All variables from covidestim output which have uncertainty interval variables
+allCIVars <- colnames(d)[which(str_detect(colnames(d), '_p2_5'))] %>% str_remove('_p2_5')
 
 # All variables which will have missing CIs if the state's results are from
 # BFGS
@@ -182,12 +228,14 @@ metadata <- mutate(
   syntheticIntervalDetails = map( # Add to the JSON object for each state
     state,
     function(state) {
+
        # Don't add a value to this key if the state sampled
       if (state %in% SampledStates) 
         return(NULL);
 
       list(
         missingIntervals = allMissingVars,
+
         # When using `auto_unbox` with `toJSON`, make sure all possibly-1-length
         # vectors are enclosed in I() so that they always are represented as
         # arrays.
