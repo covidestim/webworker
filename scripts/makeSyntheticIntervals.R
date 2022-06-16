@@ -72,12 +72,12 @@ SampledStates <- unique((d %>% filter(!is.na(infections_p2_5)))$state)
 
 cli_alert_info("{.val {length(SampledStates)}} sampled from this run")
 
-lm_p97_5 <- lm_p2_5 <- NULL
+lm_p25 <- lm_p75 <- lm_p97_5 <- lm_p2_5 <- NULL
 
-Bounds     <- 300
+Bounds     <- 21
 n.ends     <- Bounds/3
-fixdays    <- 7
-dayknots   <- round(c(1:fixdays, seq(fixdays+1, Bounds-1, length.out = (dfree - 1 - fixdays))))
+fixweeks    <- 2
+weekknots   <- round(c(1:fixweeks, seq(fixweeks+1, Bounds-1, length.out = (dfree - 1 - fixweeks))))
 
 y <- d %>% 
   left_join(pop, by = "state") %>%
@@ -98,24 +98,24 @@ y <- d %>%
     }
   ) %>%
   mutate(
-    days = as.numeric(max(date) - date) + 1,
+    weeks = round(as.numeric(max(date) - date) / 7) + 1,
 
     # transform time: first n.ends and last n.ends
     time = if_else(
-      days <= n.ends,
-      days,
+      weeks <= n.ends,
+      weeks,
       if_else(
-        (max(days) - days) < n.ends,
-        days - max(days) + Bounds,
-        n.ends + (n.ends/(max(days)-2*n.ends))*(days-n.ends)
+        (max(weeks) - weeks) < n.ends,
+        weeks - max(weeks) + Bounds,
+        n.ends + (n.ends/(max(weeks)-2*n.ends))*(weeks-n.ends)
       )
     )
   ) %>%
   ungroup() %>%
-  mutate_at(vars(starts_with("infections_cumulative")),  ~logit(.)) %>%
+  # mutate_at(vars(starts_with("infections_cumulative")),  ~logit(.)) %>%
   mutate_at(
     vars(
-      -state, -date, -pop, -time, -days, -starts_with("infections_cumulative")
+      -state, -date, -pop, -time, -weeks
     ),
     log
   )
@@ -124,32 +124,51 @@ y <- d %>%
 if (length(SampledStates) > K) {
   for (j in CIvars) {
     y_p97_5 <- y[[j]] - y[[paste0(j, "_p97_5")]]
+    y_p75   <- y[[j]] - y[[paste0(j, "_p75")]]
+    y_p25   <- y[[j]] - y[[paste0(j, "_p25")]]
     y_p2_5  <- y[[j]] - y[[paste0(j, "_p2_5")]]
 
     lm_p97_5[[j]] <- lm(
       y_p97_5 ~ splines::ns(
-        y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = dayknots
+        y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = weekknots
+      )
+    )
+    
+    lm_p75[[j]] <- lm(
+      y_p975 ~ splines::ns(
+        y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = weekknots
+      )
+    )
+    
+    lm_p25[[j]] <- lm(
+      y_p25 ~ splines::ns(
+        y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = weekknots
       )
     )
 
     lm_p2_5[[j]] <- lm(
       y_p2_5 ~ splines::ns(
-        y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = dayknots
+        y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = weekknots
       )
     )
   }
 
-  cli_alert_info("Finished fitting _p97_5/_p2_5 LMs")
+  cli_alert_info("Finished fitting _p97_5/_p75/_p25/_p2_5 LMs")
 
   if (!is.null(args$writeBackup)) {
     cli_alert_info("Writing LM archive to {.file {args$writeBackup}}")
-    saveRDS(list("lm_p97_5" = lm_p97_5,"lm_p2_5" = lm_p2_5), args$writeBackup)
+    saveRDS(list("lm_p97_5" = lm_p97_5,
+                 "lm_p75" = lm_p75,
+                 "lm_p25" = lm_p25,
+                 "lm_p2_5" = lm_p2_5), args$writeBackup)
   }
 
 } else if (!is.null(arch)) { # Otherwise, load archived LM objects, if possible
   cli_alert_warning("Too few states sampled ({.val {length(SampledStates)}}), instead loading backup LM objects from {.file {arch}}")
   res <- readRDS(arch)
   lm_p97_5 <- res$lm_p97_5
+  lm_p75 <- res$lm_p75
+  lm_p25 <- res$lm_p25
   lm_p2_5  <- res$lm_p2_5
   usedBackup <- TRUE
 } else { # Otherwise, error and exit
@@ -160,33 +179,51 @@ if (length(SampledStates) > K) {
 # Compute new CIs
 for (j in CIvars) {
   cli_alert_info("Computing CIs for variable {.code {j}}")
-  if(j == "infections_cumulative"){
-    pred_p97_5 <- y$pop * invlogit(
-      y[[j]] -
-        predict(
-          lm_p97_5[[j]],
-          data.frame(splines::ns(
-            y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = dayknots
-          ))
-        )
-    )
-
-    pred_p2_5 <- y$pop * invlogit(
-      y[[j]] -
-        predict(
-          lm_p2_5[[j]],
-          data.frame(splines::ns(
-            y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = dayknots
-          ))
-        )
-    )
-
-  } else {
+  # if(j == "infections_cumulative"){
+  #   pred_p97_5 <- y$pop * invlogit(
+  #     y[[j]] -
+  #       predict(
+  #         lm_p97_5[[j]],
+  #         data.frame(splines::ns(
+  #           y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = dayknots
+  #         ))
+  #       )
+  #   )
+  # 
+  #   pred_p2_5 <- y$pop * invlogit(
+  #     y[[j]] -
+  #       predict(
+  #         lm_p2_5[[j]],
+  #         data.frame(splines::ns(
+  #           y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = dayknots
+  #         ))
+  #       )
+  #   )
+  # 
+  # } else {
     pred_p97_5 <- exp(y[[j]] -
       predict(
         lm_p97_5[[j]],
         splines::ns(
-          y$time, df = dfree, Boundary.knots = c(0,300), knots = dayknots
+          y$time, df = dfree, Boundary.knots = c(0,21), knots = weekknots
+        )
+      )
+    )
+    
+    pred_p75 <- exp(y[[j]] -
+      predict(
+        lm_p75[[j]],
+        splines::ns(
+          y$time, df = dfree, Boundary.knots = c(0,21), knots = weekknots
+        )
+      )
+    )
+    
+    pred_p25 <- exp(y[[j]] -
+      predict(
+        lm_p25[[j]],
+        splines::ns(
+          y$time, df = dfree, Boundary.knots = c(0,21), knots = weekknots
         )
       )
     )
@@ -195,18 +232,22 @@ for (j in CIvars) {
       predict(
         lm_p2_5[[j]],
         splines::ns(
-          y$time, df = dfree, Boundary.knots = c(0,300), knots = dayknots
+          y$time, df = dfree, Boundary.knots = c(0,21), knots = weekknots
         )
       )
     )
-  }
+  # }
 
   col_name_p97_5 <- glue("{j}_p97_5")
+  col_name_p75 <- glue("{j}_p75")
+  col_name_p25 <- glue("{j}_p25")
   col_name_p2_5  <- glue("{j}_p2_5")
 
   # Only replace confidence intervals if they are actually missing! Otherwise
   # all states which sampled will be overwritten by the synthetic intervals.
   d[col_name_p97_5] <- ifelse(is.na(d[[col_name_p97_5]]), pred_p97_5, d[[col_name_p97_5]])
+  d[col_name_p75] <- ifelse(is.na(d[[col_name_p75]]), pred_p75, d[[col_name_p75]])
+  d[col_name_p25] <- ifelse(is.na(d[[col_name_p25]]), pred_p25, d[[col_name_p25]])
   d[col_name_p2_5]  <- ifelse(is.na(d[[col_name_p2_5]]),  pred_p2_5,  d[[col_name_p2_5]])
 }
 
