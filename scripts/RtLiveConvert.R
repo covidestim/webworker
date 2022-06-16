@@ -17,8 +17,8 @@ Usage:
 Options:
   --method <csv>       Specify fit method (sampler/optimizer) as .csv [state,method]
   -o <output_path>     Where to save the .pack file
-  --pop <pop_path>     Path to a .csv with columns fips,pop
-  --input <input_path> Path to a .csv with columns date, cases, deaths, fracpos
+  --pop <pop_path>     Path to a .csv with columns state, pop
+  --input <input_path> Path to a .csv with columns state, date, cases, deaths, RR, hospi, boost
   <summary_path>       The path to the summary .csv produced by a set of runs
   -h --help            Show this screen.
   --version            Show version.
@@ -35,7 +35,7 @@ d <- read_csv(
     .default = col_double(),
     state = col_character(),
     date = col_date(format = ""),
-    data.available = col_logical()
+    data_available = col_logical()
   )
 )
 pd()
@@ -44,23 +44,24 @@ ps("Reading input data file {.file {args$input}}")
 d_input <- read_csv(
     args$input,
     col_types = cols(
-      date = col_date(format = ""),
-      state = col_character(),
-      cases = col_double(),
+      state  = col_character(),
+      date   = col_date(format  = ""),
+      cases  = col_double(),
       deaths = col_double(),
-      fracpos = col_double(),
-      volume = col_double(),
-      RR = col_double()
+      RR     = col_double(),
+      hospi  = col_double(),
+      boost  = col_double()
     )
   ) %>%
-  transmute(date, state,
-            input_cases = cases,
-            input_deaths = deaths,
-            input_volume = round(input_cases / fracpos))
+  transmute(
+    date, state,
+    input_cases  = cases,
+    input_deaths = deaths
+  )
 pd()
 
 ps("Reading state population file {.file {args$pop}}")
-d_pop <- read_csv(args$pop, col_types = cols( state = col_character(), pop = col_double()))
+d_pop <- read_csv(args$pop, col_types = cols(state = col_character(), pop = col_double()))
 pd()
 
 # By default we assume no states were optimized
@@ -87,7 +88,7 @@ ps("Joining results to case/death/volume data")
 d <- left_join(d, d_input, by = c('date', 'state'))
 pd()
 
-d <- filter(d, data.available == TRUE)
+d <- filter(d, data_available == TRUE)
 
 # Split each state into its own group, then split each group into its own df
 d_split <- d %>% group_by(state) %>% group_split()
@@ -108,49 +109,37 @@ process_state <- function(df, stateName) {
     "Processing state {stateName}{ifelse(stateWasOptimized, ' (Optimized w/ synthetic intervals)', '')}",
   )
 
-  c("date"           = "date",
-    "r0"             = "Rt",
-    "r0_l80"         = "Rt.lo",
-    "r0_h80"         = "Rt.hi",
-    "cases_new"      = "input_cases",
-    "corr_cases_new" = "cases.fitted",
-    "tests_new"      = "input_volume",
-    "deaths_new"     = "input_deaths",
-    "onsets"         = "infections",
-    "onsets_l95"     = "infections.lo",
-    "onsets_h95"     = "infections.hi",
-    "onsetsPC"       = "infections",
-    "onsetsPC_l95"   = "infections.lo",
-    "onsetsPC_h95"   = "infections.hi",
-    "cumulative"     = "cum.incidence",
-    "cumulative_l95" = "cum.incidence.lo",
-    "cumulative_h95" = "cum.incidence.hi",
-    "corr_cases_raw" = "input_cases"
+  c("date"                       = "date",
+    "r_t"                        = "r_t",
+    "r_t_p2_5"                   = "r_t_p2_5",
+    "r_t_p97_5"                  = "r_t_p97_5",
+    "input_cases"                = "input_cases",
+    "fitted_cases"               = "fitted_cases",
+    "input_deaths"               = "input_deaths",
+    "infections"                 = "infections",
+    "infections_p2_5"            = "infections_p2_5",
+    "infections_p97_5"           = "infections_p97_5",
+    "infections_PC"              = "infections",
+    "infections_PC_p2_5"         = "infections_p2_5",
+    "infections_PC_p97_5"        = "infections_p97_5",
+    "infections_cumulative"      = "infections_cumulative",
+    "infections_cumulative_p2_5" = "infections_cumulative_p2_5",
+    "infections_cumulative_p2_5" = "infections_cumulative_p2_5",
+    "input_cases"                = "input_cases"
   ) -> vars_to_keep
-
-  # if (stateWasOptimized)
-  #   df <- mutate(
-  #     df,
-  #     Rt.lo            = Rt,
-  #     Rt.hi            = Rt,
-  #     infections.lo    = infections,
-  #     infections.hi    = infections,
-  #     cum.incidence.lo = cum.incidence,
-  #     cum.incidence.hi = cum.incidence
-  #   )
 
   df <- select_at(df, vars_to_keep)
 
   df <- mutate(df, date = format(date, '%Y-%m-%d'))
   df <- mutate_at(
     df,
-    vars(starts_with("onsetsPC")),
+    vars(starts_with("infections_PC")),
     ~100000* . /
       d_pop[[which(d_pop$state == stateName), 'pop']]
   )
   df <- mutate_at(
     df,
-    vars(starts_with("cumulative")),
+    vars(starts_with("infections_cumulative")),
     ~100 * . /
       d_pop[[which(d_pop$state == stateName), 'pop']]
   )

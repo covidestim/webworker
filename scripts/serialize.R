@@ -22,16 +22,16 @@ Options:
   --version          Show version.
 ', name = "serialize.R") -> doc
 
-args <- docopt(doc, version = '0.2')
+args <- docopt(doc, version = '0.3')
 
 cli_process_start("Reading {.file {args$summary_path}}")
 d <- read_csv(
   args$summary_path,
   col_types = cols(
-    date = col_date(format = ""),
-    fips = col_character(),
-    data.available = col_logical(),
-    .default = col_number()
+    date           = col_date(format  = ""),
+    fips           = col_character(),
+    data_available = col_logical(),
+    .default       = col_number()
   )
 )
 cli_process_done()
@@ -41,32 +41,26 @@ pop <- read_csv(
   args$pop,
   col_types = cols_only(
     fips = col_character(),
-    pop = col_number()
+    pop  = col_number()
   )
 )
 cli_process_done()
 
 cli_process_start("Computing per-capita infection rates")
-d <- select(d, fips, date, Rt, 
-            seroprevalence = cum.incidence, infections) %>%
-  filter(date == max(date) | lubridate::wday(date) == 1) %>%
+d <- select(
+  d, fips, date, r_t, infections_cumulative, infections
+) %>%
   left_join(pop, by = "fips") %>%
-  mutate(infectionsPC = infections * 100000 / pop,
-         seroprevalence = 100*seroprevalence/pop) %>%
+  mutate(
+    infections_PC  = infections * 100000 / pop
+  ) %>%
   select(-pop)
 cli_process_done()
 
 strategy1 <- function(d) {
-  mutate(d, Rt = as.integer(round(Rt*100)))
+  mutate(d, r_t = as.integer(round(r_t*100)))
 }
  
-strategy2 <- function(d) {
-  strategy1(d) %>%
-  mutate(
-    date = map(date, ~msgpack_timestamp_encode(as.POSIXct(.)))
-  )
-}
-
 cli_process_start("Serializing & writing MsgPack to {.file {args$o}}")
 writeBin(msgpack_pack(strategy1(d)), args$o)
 cli_process_done()
