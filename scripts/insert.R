@@ -1,8 +1,10 @@
 #!/usr/bin/Rscript
 'Covidestim DB inserter
 
+Hmm does this work?
+
 Usage:
-  insert.R --input <path> --summary <path> --method <path> --key <string> --run-date <date>
+  insert.R --input <path> --summary <path> --method <path> --key <string> --run-date <date> [--endpoint <url>] [--save-mapping <path>]
   insert.R (-h | --help)
   insert.R --version
 
@@ -12,6 +14,8 @@ Options:
   --method <path>   Path to a CSV, [state/fips, method = sampling|optimizing]
   --key <string>    Must be "state" or "fips" - the grouping key for the data
   --run-date <string>  YYYY-MM-DD
+  --endpoint <url>  URL of a Covidestim API [default: https://api2.covidestim.org/rpc/insert_run]
+  --save-mapping <path>  Where to save a CSV mapping [geo_name, run_id]
   -h --help  Show this screen.
   --version  Show version.
 
@@ -67,9 +71,12 @@ method_df_colspec <- rlang::list2(
 # the `state`/`fips` column to `geo_name`.
 rename_to_geo_name <- function(df) rename(df, geo_name = !!args$key)
 
-input_df   <- read_csv(args$input,   col_types = input_df_colspec)
+cli_alert_info("Loading {.code input_df} from {.file {args$input}}")
+input_df <- read_csv(args$input, col_types = input_df_colspec)
+cli_alert_info("Loading {.code summary_sf} from {.file {args$summary}}")
 summary_df <- read_csv(args$summary, col_types = summary_df_colspec)
-method_df  <- read_csv(args$method,  col_types = method_df_colspec)
+cli_alert_info("Loading {.code method_df} from {.file {args$method}}")
+method_df <- read_csv(args$method, col_types = method_df_colspec)
 
 input_df   <- rename_to_geo_name(input_df)
 summary_df <- rename_to_geo_name(summary_df)
@@ -87,7 +94,7 @@ geo_type_from_key <- switch(args$key, "state" = "state", "fips" = "county")
 
 # Produce a tibble where each row contains all the fields needed for the
 # RPC call
-rowwise <- summary_df %>%
+one_row_per_run <- summary_df %>%
   left_join(input_df,  by = "geo_name") %>%
   left_join(method_df, by = "geo_name") %>%
   mutate(
@@ -105,8 +112,6 @@ rowwise <- summary_df %>%
     )
   )
     
-print(rowwise)
-
 # JWT token that gives privileges for executing the `insert_run` function must
 # be passed as an environment variable.
 get_token <- function() {
@@ -118,25 +123,40 @@ get_token <- function() {
   token
 }
 
-# Hardcoded test endpoint. In the future this will be accessed via an env
-# variable.
-endpoint <- "http://localhost:3000/rpc/insert_run"
-
 response <- POST(
-  endpoint,
+  args$endpoint,
   add_headers(
     Authorization = paste0("Bearer ", get_token()),
 
     # This allows us to call the `insert_run` function for each row of
-    # `rowwise`.
-    Prefer = "params=multiple-objects"
+    # `one_row_per_run`.
+    Prefer = "params=multiple-objects",
+    Accept = "text/csv"
   ),
-  body = rowwise,
+  user_agent("https://github.com/covidestim/webworker"),
+  body = one_row_per_run,
   encode = "json" # NOTE: auto_unbox = TRUE for this... see jsonlite docs
 )
 
-print(response)
-print(content(response))
+if (status_code(response) != 200) {
+  stop(
+    sprintf(
+      "Covidestim API request failed [%s]\n%s\n<%s>", 
+      status_code(resp),
+      parsed$message,
+      parsed$documentation_url
+    ),
+    call. = FALSE
+  )
+}
 
-# handle weird codes
-# return the mapping from geo_name to run_id
+cli_alert_success("Call to {.url {args$endpoint}} succeeded")
+print(response)
+
+if (!is.null(args$save_mapping)) {
+  # save the mapping from geo_name to run_id
+  cli_alert_info("Saving mapping to {.file {args$save_mapping}}")
+  select(one_row_per_run, geo_name) %>%
+    bind_cols(content(response)) %>%
+    write_csv(args$save_mapping)
+}
