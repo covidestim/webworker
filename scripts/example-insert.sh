@@ -9,4 +9,5 @@ export COVIDESTIM_JWT=$(cat ../../db/new-schema/AUTH_TOKEN)
   --method method.csv \
   --run-date $1 \
   --endpoint http://localhost:3000/rpc/insert_run \
-  --save-mapping mapping.csv
+  --save-mapping mapping.csv \
+  --metadata metadata.json

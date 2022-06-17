@@ -4,7 +4,7 @@
 Hmm does this work?
 
 Usage:
-  insert.R --input <path> --summary <path> --method <path> --key <string> --run-date <date> [--endpoint <url>] [--save-mapping <path>]
+  insert.R --input <path> --summary <path> --method <path> --metadata <path> --key <string> --run-date <date> [--endpoint <url>] [--save-mapping <path>]
   insert.R (-h | --help)
   insert.R --version
 
@@ -12,6 +12,7 @@ Options:
   --input <path>    Path to a CSV, [state/fips, date, cases, deaths, RR, hospi, boost]
   --summary <path>  Path to a CSV, [state/fips, date, ...rest of Covidestim schema]
   --method <path>   Path to a CSV, [state/fips, method = sampling|optimizing]
+  --metadata <path>  Path to a JSON of metadata generated earlier in the pipeline
   --key <string>    Must be "state" or "fips" - the grouping key for the data
   --run-date <string>  YYYY-MM-DD
   --endpoint <url>  URL of a Covidestim API [default: https://api2.covidestim.org/rpc/insert_run]
@@ -77,16 +78,20 @@ cli_alert_info("Loading {.code summary_sf} from {.file {args$summary}}")
 summary_df <- read_csv(args$summary, col_types = summary_df_colspec)
 cli_alert_info("Loading {.code method_df} from {.file {args$method}}")
 method_df <- read_csv(args$method, col_types = method_df_colspec)
+cli_alert_info("Loading {.code metadata_df} from {.file {args$metadata}}")
+metadata_df <- jsonlite::read_json(args$metadata, simplifyVector = T)
 
-input_df   <- rename_to_geo_name(input_df)
-summary_df <- rename_to_geo_name(summary_df)
-method_df  <- rename_to_geo_name(method_df)
+input_df    <- rename_to_geo_name(input_df)
+summary_df  <- rename_to_geo_name(summary_df)
+method_df   <- rename_to_geo_name(method_df)
+metadata_df <- rename_to_geo_name(metadata_df)
 
 # Get a nested tibble of all the data for each geography. The result of this
 # is a tibble with columns `geo_name` and `input`, where `input` is itself
 # a tibble, with all columns except `geo_name` present.
-input_df   <- nest(input_df,   input   = !geo_name)
-summary_df <- nest(summary_df, summary = !geo_name)
+input_df    <- nest(input_df,    input    = !geo_name)
+summary_df  <- nest(summary_df,  summary  = !geo_name)
+metadata_df <- nest(metadata_df, metadata = !geo_name)
 
 # `geo_type` in the db is either "state" or "county", but `--key` passes
 # "state" or "fips".
@@ -95,8 +100,9 @@ geo_type_from_key <- switch(args$key, "state" = "state", "fips" = "county")
 # Produce a tibble where each row contains all the fields needed for the
 # RPC call
 one_row_per_run <- summary_df %>%
-  left_join(input_df,  by = "geo_name") %>%
-  left_join(method_df, by = "geo_name") %>%
+  left_join(input_df,    by = "geo_name") %>%
+  left_join(method_df,   by = "geo_name") %>%
+  left_join(metadata_df, by = "geo_name") %>%
   mutate(
     run_date = args$run_date,
     geo_type = geo_type_from_key,
