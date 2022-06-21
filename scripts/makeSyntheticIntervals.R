@@ -135,7 +135,7 @@ if (length(SampledStates) > K) {
     )
     
     lm_p75[[j]] <- lm(
-      y_p975 ~ splines::ns(
+      y_p75 ~ splines::ns(
         y$time, df = dfree, Boundary.knots = c(0,Bounds), knots = weekknots
       )
     )
