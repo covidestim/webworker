@@ -27,6 +27,7 @@ suppressPackageStartupMessages({
   library(dplyr)
   library(readr)
   library(magrittr)
+  library(purrr)
 })
 
 args <- docopt(doc, version = 'insert.R 0.1')
@@ -111,6 +112,8 @@ attach_method <- function(df) {
 one_row_per_run <- summary_df %>%
   left_join(input_df,    by = "geo_name") %>%
   left_join(metadata_df, by = "geo_name") %>%
+  # `as.list` prevents `metadata` from being a length-1 array
+  mutate(metadata = map(metadata, as.list)) %>%
   attach_method(.) %>%
   mutate(
     run_date = args$run_date,
