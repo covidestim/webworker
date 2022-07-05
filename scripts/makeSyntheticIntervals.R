@@ -245,6 +245,12 @@ for (j in CIvars) {
 
   # Only replace confidence intervals if they are actually missing! Otherwise
   # all states which sampled will be overwritten by the synthetic intervals.
+  if(j == "infections_cumulative") {
+    pred_p97_5 <- pred_p97_5 * y$pop
+    pred_p75 <- pred_p75 * y$pop
+    pred_p25 <- pred_p25 * y$pop
+    pred_p2_5 <- pred_p2_5 * y$pop
+  }
   d[col_name_p97_5] <- ifelse(is.na(d[[col_name_p97_5]]), pred_p97_5, d[[col_name_p97_5]])
   d[col_name_p75] <- ifelse(is.na(d[[col_name_p75]]), pred_p75, d[[col_name_p75]])
   d[col_name_p25] <- ifelse(is.na(d[[col_name_p25]]), pred_p25, d[[col_name_p25]])
