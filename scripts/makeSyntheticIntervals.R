@@ -63,7 +63,7 @@ pd()
 arch       <- args$backup # archive filepath
 CIvars     <- str_split(args$vars, ',')[[1]]
 K          <- as.numeric(args$minSampled) # minimum number of sampled states
-dfree      <- 50
+dfree      <- 15
 outfile    <- args$o
 usedBackup <- FALSE # Stores whether or not an RDS LM archive was loaded
 
@@ -74,9 +74,9 @@ cli_alert_info("{.val {length(SampledStates)}} sampled from this run")
 
 lm_p25 <- lm_p75 <- lm_p97_5 <- lm_p2_5 <- NULL
 
-Bounds     <- 21
+Bounds     <- 30
 n.ends     <- Bounds/3
-fixweeks    <- 2
+fixweeks    <- 3
 weekknots   <- round(c(1:fixweeks, seq(fixweeks+1, Bounds-1, length.out = (dfree - 1 - fixweeks))))
 
 y <- d %>% 
