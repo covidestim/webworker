@@ -124,7 +124,7 @@ process_state <- function(df, stateName) {
     "infections_PC_p97_5"        = "infections_p97_5",
     "infections_cumulative"      = "infections_cumulative",
     "infections_cumulative_p2_5" = "infections_cumulative_p2_5",
-    "infections_cumulative_p2_5" = "infections_cumulative_p2_5",
+    "infections_cumulative_p97_5"= "infections_cumulative_p97_5",
     "input_cases"                = "input_cases"
   ) -> vars_to_keep
 
