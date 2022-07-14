@@ -133,8 +133,13 @@ process_state <- function(df, stateName) {
   df <- mutate(df, date = format(date, '%Y-%m-%d'))
   df <- mutate_at(
     df,
+    vars(c("infections", "infections_p2_5", "infections_p97_5")),
+    ~. / 7
+  )
+  df <- mutate_at(
+    df,
     vars(starts_with("infections_PC")),
-    ~100000* . /
+    ~100000/7* . /
       d_pop[[which(d_pop$state == stateName), 'pop']]
   )
   df <- mutate_at(
