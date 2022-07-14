@@ -84,6 +84,10 @@ if (!identical(args$method, FALSE)) {
   cli_end(ulid)
 }
 
+ps("Clipping results to g.t.e. {.val 2021-12-01}")
+d <- filter(d, date > as.Date('2021-12-01'))
+pd()
+
 ps("Joining results to case/death/volume data")
 d <- left_join(d, d_input, by = c('date', 'state'))
 pd()

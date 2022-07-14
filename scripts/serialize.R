@@ -36,6 +36,10 @@ d <- read_csv(
 )
 cli_process_done()
 
+cli_process_start("Clipping to g.t.e {.val 2021-12-01}")
+d <- filter(d, date >= as.Date('2021-12-01'))
+cli_process_done()
+
 cli_process_start("Reading population file {.file {args$pop_path}}")
 pop <- read_csv(
   args$pop,
