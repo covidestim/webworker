@@ -8,7 +8,7 @@ LABEL org.label-schema.license="GPL-2.0" \
 ENV PATH /opt/webworker/scripts:$PATH
 
 # Install MsgPack and sf
-RUN install2.r --error --deps TRUE RcppMsgPack sf
+RUN install2.r --error --deps TRUE RcppMsgPack sf spdep raster
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
