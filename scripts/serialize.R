@@ -56,7 +56,8 @@ d <- select(
 ) %>%
   left_join(pop, by = "fips") %>%
   mutate(
-    infections_PC  = (infections/7) * (100000 / pop),
+    infections_cumulative = infections_cumulative * (100000 / pop),
+    infections_PC = (infections/7) * (100000 / pop),
     infections = infections/7
   ) %>%
   select(-pop)
