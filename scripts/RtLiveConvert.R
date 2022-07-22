@@ -149,7 +149,7 @@ process_state <- function(df, stateName) {
   df <- mutate_at(
     df,
     vars(starts_with("infections_cumulative")),
-    ~100 * . /
+    ~1e5 * . /
       d_pop[[which(d_pop$state == stateName), 'pop']]
   )
 
