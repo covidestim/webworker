@@ -7,7 +7,7 @@ usage:
   insert.R --version
 
 Options:
-  --input <path>    Path to a CSV, [state/fips, date, cases, deaths, RR, hospi, boost]
+  --input <path>    Path to a CSV, [state/fips, date, cases, deaths, RR, hosp, boost]
   --summary <path>  Path to a CSV, [state/fips, date, ...rest of Covidestim schema]
   --method <path>   Path to a CSV, [state/fips, method = sampling|optimizing]
   --metadata <path>  Path to a JSON of metadata generated earlier in the pipeline
@@ -49,7 +49,7 @@ input_df_colspec <- rlang::list2(
   cases      = col_number(),
   deaths     = col_number(),
   RR         = col_number(),
-  hospi      = col_number(),
+  hosp       = col_number(),
   boost      = col_number()
 ) %>% do.call(cols, .)
 
